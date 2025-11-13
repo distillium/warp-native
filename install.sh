@@ -2,26 +2,29 @@
 
 SCRIPT_LANG=""
 
+
 function select_language {
-    echo -e "\n\e[1;35m╭─────────────────────────────────────╮"
-    echo -e "│      \e[1;36m  W A R P - N A T I V E        \e[1;35m│"
-    echo -e "│     \e[2;37m       by distillium            \e[1;35m│"
-    echo -e "\e[1;35m╰─────────────────────────────────────╯\e[0m"
-    echo ""
-    echo -e "\e[1;34mSelect language / Выберите язык:\e[0m"
-    echo -e "\e[1;32m1)\e[0m English"
-    echo -e "\e[1;32m2)\e[0m Русский"
-    echo ""
-    
-    while true; do
-        read -p "Choice / Выбор [1-2]: " choice
-        case $choice in
-            1) SCRIPT_LANG="en"; break ;;
-            2) SCRIPT_LANG="ru"; break ;;
-            *) echo -e "\e[1;31mInvalid choice / Неверный выбор\e[0m" ;;
-        esac
-    done
-    
+    if [ -z "$SCRIPT_LANG" ]; then
+      echo -e "\n\e[1;35m╭─────────────────────────────────────╮"
+      echo -e "│      \e[1;36m  W A R P - N A T I V E        \e[1;35m│"
+      echo -e "│     \e[2;37m       by distillium            \e[1;35m│"
+      echo -e "\e[1;35m╰─────────────────────────────────────╯\e[0m"
+      echo ""
+      echo -e "\e[1;34mSelect language / Выберите язык:\e[0m"
+      echo -e "\e[1;32m1)\e[0m English"
+      echo -e "\e[1;32m2)\e[0m Русский"
+      echo ""
+
+      while true; do
+          read -p "Choice / Выбор [1-2]: " choice
+          case $choice in
+              1) SCRIPT_LANG="en"; break ;;
+              2) SCRIPT_LANG="ru"; break ;;
+              *) echo -e "\e[1;31mInvalid choice / Неверный выбор\e[0m" ;;
+          esac
+      done
+    fi
+
     clear
     echo -e "\n\e[1;35m╭─────────────────────────────────────╮"
     echo -e "│      \e[1;36m  W A R P - N A T I V E        \e[1;35m│"
@@ -219,6 +222,13 @@ if [[ $EUID -ne 0 ]]; then
     fail "This script must be run as root / Этот скрипт должен быть запущен от имени root"
     exit 1
 fi
+
+case $1 in
+  ru)
+    SCRIPT_LANG="ru";;
+  en)
+    SCRIPT_LANG="en";;
+esac
 
 select_language
 
