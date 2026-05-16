@@ -134,6 +134,8 @@ function msg {
                 "cf_response_plus") echo "Ответ от Cloudflare: warp=plus — WARP+ работает!" ;;
                 "recreating_account") echo "Обнаружен старый аккаунт. Для активации WARP+ пересоздаём аккаунт..." ;;
                 "old_account_removed") echo "Старый аккаунт удалён." ;;
+                "setup_alias") echo "11. Создание команды warp..." ;;
+                "alias_created") echo "Команда \e[1;32mwarp\e[0m создана: введите \e[1;32mwarp\e[0m для просмотра статуса." ;;
                 *) echo "$key" ;;
             esac
             ;;
@@ -238,6 +240,8 @@ function msg {
                 "cf_response_plus") echo "Cloudflare response: warp=plus — WARP+ is working!" ;;
                 "recreating_account") echo "Old account detected. Recreating account to activate WARP+..." ;;
                 "old_account_removed") echo "Old account removed." ;;
+                "setup_alias") echo "11. Creating warp command..." ;;
+                "alias_created") echo "\e[1;32mwarp\e[0m command created: type \e[1;32mwarp\e[0m to view status." ;;
                 *) echo "$key" ;;
             esac
             ;;
@@ -653,6 +657,72 @@ EOF
 
 chmod 644 /etc/cron.d/warp-native
 ok "$(msg "watchdog_cron_set")"
+echo ""
+
+info "$(msg "setup_alias")"
+
+cat > /usr/local/bin/warp <<'WARP_CMD_EOF'
+#!/bin/bash
+
+function show_status {
+    echo ""
+    echo -e "\e[1;35m╭─────────────────────────────────────╮"
+    echo -e "│      \e[1;36m  W A R P - N A T I V E        \e[1;35m│"
+    echo -e "│     \e[2;37m       by distillium            \e[1;35m│"
+    echo -e "\e[1;35m╰─────────────────────────────────────╯\e[0m"
+    echo ""
+
+    if systemctl is-active --quiet wg-quick@warp; then
+        status="\e[1;32mactive\e[0m"
+    else
+        status="\e[1;31minactive\e[0m"
+    fi
+
+    tunnel_ip=$(ip addr show warp 2>/dev/null | grep 'inet ' | awk '{print $2}' | head -1)
+    [ -z "$tunnel_ip" ] && tunnel_ip="—"
+
+    hs_ts=$(wg show warp latest-handshakes 2>/dev/null | awk '{print $2}')
+    if [[ -n "$hs_ts" && "$hs_ts" -gt 0 ]]; then
+        age=$(( $(date +%s) - hs_ts ))
+        handshake="${age}s ago"
+    else
+        handshake="—"
+    fi
+
+    account_type=$(wgcf status 2>/dev/null | grep -i "Account type" | awk -F': ' '{print $2}' | xargs)
+    if [[ "$account_type" == "unlimited" ]]; then
+        account="WARP+"
+    elif [[ -n "$account_type" ]]; then
+        account="Free"
+    else
+        account="—"
+    fi
+
+    echo -e "  \e[1;36mСтатус     :\e[0m $status"
+    echo -e "  \e[1;36mIP туннеля :\e[0m $tunnel_ip"
+    echo -e "  \e[1;36mHandshake  :\e[0m $handshake"
+    echo -e "  \e[1;36mАккаунт    :\e[0m $account"
+    echo ""
+    echo -e "\e[1;35m──────────────────────────────────────\e[0m"
+    echo -e "  \e[1;32mwarp start\e[0m    — запустить"
+    echo -e "  \e[1;32mwarp stop\e[0m     — остановить"
+    echo -e "  \e[1;32mwarp restart\e[0m  — перезапустить"
+    echo -e "  \e[1;32mwarp log\e[0m      — лог watchdog"
+    echo -e "\e[1;35m──────────────────────────────────────\e[0m"
+    echo ""
+}
+
+case "$1" in
+    start)   systemctl start wg-quick@warp ;;
+    stop)    systemctl stop wg-quick@warp ;;
+    restart) systemctl restart wg-quick@warp ;;
+    log)     tail -f /opt/warp-native/logs/watchdog.log ;;
+    *)       show_status ;;
+esac
+WARP_CMD_EOF
+
+chmod +x /usr/local/bin/warp
+ok "$(msg "alias_created")"
 echo ""
 
 # ИТОГОВАЯ СВОДКА
