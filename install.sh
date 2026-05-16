@@ -716,7 +716,13 @@ case "$1" in
     start)   systemctl start wg-quick@warp ;;
     stop)    systemctl stop wg-quick@warp ;;
     restart) systemctl restart wg-quick@warp ;;
-    log)     tail -f /opt/warp-native/logs/watchdog.log ;;
+    log)
+        if [[ ! -f /opt/warp-native/logs/watchdog.log ]]; then
+            echo "Лог пока пуст — watchdog ещё не запускался."
+        else
+            tail -f /opt/warp-native/logs/watchdog.log
+        fi
+        ;;
     *)       show_status ;;
 esac
 WARP_CMD_EOF
