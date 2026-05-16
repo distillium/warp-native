@@ -51,6 +51,7 @@ function msg {
                 "wgcf_move_failed") echo "Не удалось переместить wgcf в /usr/local/bin." ;;
                 "wgcf_installed") echo "установлен в /usr/local/bin/wgcf." ;;
                 "arch_detected") echo "Определена архитектура:" ;;
+                "no_downloader") echo "Не найден wget или curl. Установите один из них и повторите." ;;
                 "register_wgcf") echo "4. Регистрация и генерация конфигурации wgcf..." ;;
                 "account_exists") echo "Файл wgcf-account.toml уже существует. Пропускаем регистрацию." ;;
                 "registering") echo "Выполняем регистрацию wgcf..." ;;
@@ -74,6 +75,7 @@ function msg {
                 "applying_license") echo "Применение WARP+ лицензии..." ;;
                 "license_applied") echo "WARP+ лицензия успешно применена!" ;;
                 "license_failed") echo "Не удалось применить лицензию. Проверьте ключ." ;;
+                "license_not_applied") echo "WARP+ ключ введён, но лицензия не была применена. Используется бесплатная версия." ;;
                 "continuing_free") echo "Продолжаем с бесплатной версией WARP." ;;
                 "skipping_license") echo "Пропускаем применение WARP+ лицензии." ;;
                 "config_regenerated") echo "Конфигурация перегенерирована с WARP+." ;;
@@ -96,7 +98,7 @@ function msg {
                 "warp_not_found") echo "Интерфейс WARP не найден — туннель не работает." ;;
                 "handshake_received") echo "Получен handshake →" ;;
                 "warp_active") echo "WARP подключён и активно обменивается трафиком." ;;
-                "handshake_failed") echo "Не удалось получить handshake в течении 10 секунд. Возможны проблемы с подключением." ;;
+                "handshake_failed") echo "Не удалось получить handshake в течение 10 секунд. Возможны проблемы с подключением." ;;
                 "cf_response") echo "Ответ от Cloudflare: warp=on" ;;
                 "cf_not_confirmed") echo "Cloudflare не подтвердил warp=on, но интерфейс работает. Это нормально." ;;
                 "warp_plus_active") echo "WARP+ активирован" ;;
@@ -104,7 +106,23 @@ function msg {
                 "enable_autostart") echo "9. Включение автозапуска WARP при старте..." ;;
                 "autostart_failed") echo "Не удалось настроить автозапуск." ;;
                 "autostart_enabled") echo "Автозапуск включен." ;;
+                "setup_watchdog") echo "10. Настройка WARP Watchdog..." ;;
+                "watchdog_interval_prompt") echo "Выберите интервал проверки watchdog:" ;;
+                "watchdog_opt_5") echo "1) Каждые 5 минут" ;;
+                "watchdog_opt_10") echo "2) Каждые 10 минут (по умолчанию)" ;;
+                "watchdog_opt_15") echo "3) Каждые 15 минут" ;;
+                "watchdog_opt_30") echo "4) Каждые 30 минут" ;;
+                "watchdog_interval_set") echo "Интервал watchdog установлен:" ;;
+                "watchdog_created") echo "Watchdog скрипт создан: /opt/warp-native/warp-watchdog.sh" ;;
+                "watchdog_cron_set") echo "Cron задача создана: /etc/cron.d/warp-native" ;;
+                "watchdog_dir_failed") echo "Не удалось создать директорию /opt/warp-native." ;;
                 "installation_complete") echo "Установка и настройка Cloudflare WARP завершены!" ;;
+                "summary_header") echo "═══════════════ ИТОГ ═══════════════" ;;
+                "summary_account") echo "Тип аккаунта :" ;;
+                "summary_tunnel_ip") echo "IP туннеля   :" ;;
+                "summary_handshake") echo "Handshake    :" ;;
+                "summary_seconds_ago") echo "сек. назад" ;;
+                "summary_footer") echo "════════════════════════════════════" ;;
                 "check_service") echo "Проверить статус службы:" ;;
                 "show_info") echo "Посмотреть информацию (WG):" ;;
                 "stop_interface") echo "Остановить интерфейс:" ;;
@@ -112,6 +130,8 @@ function msg {
                 "restart_interface") echo "Перезапустить интерфейс:" ;;
                 "disable_autostart") echo "Отключить автозапуск:" ;;
                 "enable_autostart_cmd") echo "Включить автозапуск:" ;;
+                "watchdog_log") echo "Лог watchdog:" ;;
+                "watchdog_config") echo "Настройки watchdog:" ;;
                 "dns_restored") echo "DNS возвращены к заводскому состоянию (восстановлены из резервной копии)" ;;
                 "cf_response_plus") echo "Ответ от Cloudflare: warp=plus — WARP+ работает!" ;;
                 "recreating_account") echo "Обнаружен старый аккаунт. Для активации WARP+ пересоздаём аккаунт..." ;;
@@ -137,6 +157,7 @@ function msg {
                 "wgcf_move_failed") echo "Failed to move wgcf to /usr/local/bin." ;;
                 "wgcf_installed") echo "installed to /usr/local/bin/wgcf." ;;
                 "arch_detected") echo "Detected architecture:" ;;
+                "no_downloader") echo "Neither wget nor curl found. Please install one and try again." ;;
                 "register_wgcf") echo "4. Registering and generating wgcf configuration..." ;;
                 "account_exists") echo "wgcf-account.toml file already exists. Skipping registration." ;;
                 "registering") echo "Performing wgcf registration..." ;;
@@ -160,6 +181,7 @@ function msg {
                 "applying_license") echo "Applying WARP+ license..." ;;
                 "license_applied") echo "WARP+ license successfully applied!" ;;
                 "license_failed") echo "Failed to apply license. Check your key." ;;
+                "license_not_applied") echo "WARP+ key was entered but license was not applied. Using free version." ;;
                 "continuing_free") echo "Continuing with free WARP version." ;;
                 "skipping_license") echo "Skipping WARP+ license application." ;;
                 "config_regenerated") echo "Configuration regenerated with WARP+." ;;
@@ -190,7 +212,23 @@ function msg {
                 "enable_autostart") echo "9. Enabling WARP autostart on boot..." ;;
                 "autostart_failed") echo "Failed to configure autostart." ;;
                 "autostart_enabled") echo "Autostart enabled." ;;
+                "setup_watchdog") echo "10. Setting up WARP Watchdog..." ;;
+                "watchdog_interval_prompt") echo "Select watchdog check interval:" ;;
+                "watchdog_opt_5") echo "1) Every 5 minutes" ;;
+                "watchdog_opt_10") echo "2) Every 10 minutes (default)" ;;
+                "watchdog_opt_15") echo "3) Every 15 minutes" ;;
+                "watchdog_opt_30") echo "4) Every 30 minutes" ;;
+                "watchdog_interval_set") echo "Watchdog interval set:" ;;
+                "watchdog_created") echo "Watchdog script created: /opt/warp-native/warp-watchdog.sh" ;;
+                "watchdog_cron_set") echo "Cron job created: /etc/cron.d/warp-native" ;;
+                "watchdog_dir_failed") echo "Failed to create /opt/warp-native directory." ;;
                 "installation_complete") echo "Cloudflare WARP installation and configuration completed!" ;;
+                "summary_header") echo "════════════════ SUMMARY ═══════════════" ;;
+                "summary_account") echo "Account type :" ;;
+                "summary_tunnel_ip") echo "Tunnel IP    :" ;;
+                "summary_handshake") echo "Handshake    :" ;;
+                "summary_seconds_ago") echo "sec. ago" ;;
+                "summary_footer") echo "════════════════════════════════════════" ;;
                 "check_service") echo "Check service status:" ;;
                 "show_info") echo "Show information (WG):" ;;
                 "stop_interface") echo "Stop interface:" ;;
@@ -198,6 +236,8 @@ function msg {
                 "restart_interface") echo "Restart interface:" ;;
                 "disable_autostart") echo "Disable autostart:" ;;
                 "enable_autostart_cmd") echo "Enable autostart:" ;;
+                "watchdog_log") echo "Watchdog log:" ;;
+                "watchdog_config") echo "Watchdog config:" ;;
                 "dns_restored") echo "DNS restored to factory state (restored from backup)" ;;
                 "cf_response_plus") echo "Cloudflare response: warp=plus — WARP+ is working!" ;;
                 "recreating_account") echo "Old account detected. Recreating account to activate WARP+..." ;;
@@ -229,6 +269,13 @@ function error_exit {
     exit 1
 }
 
+function try_register {
+    output=$(timeout 60 bash -c 'yes | wgcf register' 2>&1)
+    ret=$?
+    echo "$output"
+    return $ret
+}
+
 RESTORE_DNS_REQUIRED=false
 
 function restore_dns {
@@ -248,7 +295,7 @@ fi
 
 select_language
 
-cd $HOME
+cd "$HOME"
 
 info "$(msg "start_install")"
 echo ""
@@ -287,7 +334,15 @@ info "$(msg "arch_detected") $ARCH -> $WGCF_ARCH"
 WGCF_DOWNLOAD_URL="https://github.com/ViRb3/wgcf/releases/download/${WGCF_VERSION}/wgcf_${WGCF_VERSION#v}_linux_${WGCF_ARCH}"
 WGCF_BINARY_NAME="wgcf_${WGCF_VERSION#v}_linux_${WGCF_ARCH}"
 
-wget -q "$WGCF_DOWNLOAD_URL" -O "$WGCF_BINARY_NAME" || error_exit "$(msg "wgcf_download_failed")"
+# fallback wget -> curl для скачивания
+if command -v wget &>/dev/null; then
+    wget -q "$WGCF_DOWNLOAD_URL" -O "$WGCF_BINARY_NAME" || error_exit "$(msg "wgcf_download_failed")"
+elif command -v curl &>/dev/null; then
+    curl -sL "$WGCF_DOWNLOAD_URL" -o "$WGCF_BINARY_NAME" || error_exit "$(msg "wgcf_download_failed")"
+else
+    error_exit "$(msg "no_downloader")"
+fi
+
 chmod +x "$WGCF_BINARY_NAME" || error_exit "$(msg "wgcf_chmod_failed")"
 mv "$WGCF_BINARY_NAME" /usr/local/bin/wgcf || error_exit "$(msg "wgcf_move_failed")"
 ok "wgcf $WGCF_VERSION $(msg "wgcf_installed")"
@@ -305,6 +360,8 @@ if [[ -n "$WARP_LICENSE" && -f wgcf-account.toml ]]; then
     ok "$(msg "old_account_removed")"
 fi
 
+LICENSE_APPLIED=false
+
 if [[ -f wgcf-account.toml ]]; then
     info "$(msg "account_exists")"
 else
@@ -319,7 +376,7 @@ else
         fi
     fi
     
-    output=$(timeout 60 bash -c 'yes | wgcf register' 2>&1)
+    output=$(try_register)
     ret=$?
     
     if [[ $ret -ne 0 ]]; then
@@ -344,7 +401,7 @@ else
         fi
         
         info "$(msg "trying_alternative")"
-        echo | wgcf register &>/dev/null || true
+        try_register &>/dev/null || true
         sleep 2
     fi
     
@@ -363,11 +420,13 @@ if [[ -n "$WARP_LICENSE" ]]; then
     info "$(msg "applying_license")"
     wgcf update --license-key "$WARP_LICENSE" &>/dev/null
     if [[ $? -eq 0 ]]; then
+        LICENSE_APPLIED=true
         ok "$(msg "license_applied")"
         wgcf generate &>/dev/null || error_exit "$(msg "config_gen_failed")"
         ok "$(msg "config_regenerated")"
     else
         warn "$(msg "license_failed")"
+        warn "$(msg "license_not_applied")"
         info "$(msg "continuing_free")"
     fi
 else
@@ -428,21 +487,24 @@ if ! wg show warp &>/dev/null; then
     exit 1
 fi
 
+# handshake через unix timestamp
+handshake_ts=0
 for i in {1..10}; do
-    handshake=$(wg show warp | grep "latest handshake" | awk -F': ' '{print $2}')
-    if [[ "$handshake" == *"second"* || "$handshake" == *"minute"* ]]; then
-        ok "$(msg "handshake_received") $handshake"
+    handshake_ts=$(wg show warp latest-handshakes | awk '{print $2}')
+    if [[ -n "$handshake_ts" && "$handshake_ts" -gt 0 ]]; then
+        age=$(( $(date +%s) - handshake_ts ))
+        ok "$(msg "handshake_received") ${age}s ago"
         ok "$(msg "warp_active")"
         break
     fi
     sleep 1
 done
 
-if [[ -z "$handshake" || "$handshake" == "0 seconds ago" ]]; then
+if [[ -z "$handshake_ts" || "$handshake_ts" -eq 0 ]]; then
     warn "$(msg "handshake_failed")"
 fi
 
-curl_result=$(curl -s --interface warp https://www.cloudflare.com/cdn-cgi/trace | grep "warp=" | cut -d= -f2)
+curl_result=$(curl -s --interface warp --max-time 5 https://www.cloudflare.com/cdn-cgi/trace | grep "warp=" | cut -d= -f2)
 
 if [[ "$curl_result" == "plus" ]]; then
     ok "$(msg "cf_response_plus")"
@@ -465,10 +527,182 @@ systemctl enable wg-quick@warp &>/dev/null || error_exit "$(msg "autostart_faile
 ok "$(msg "autostart_enabled")"
 echo ""
 
-restore_dns
+# WATCHDOG
+info "$(msg "setup_watchdog")"
+echo ""
+info "$(msg "watchdog_interval_prompt")"
+echo -e "\e[1;32m$(msg "watchdog_opt_5")\e[0m"
+echo -e "\e[1;32m$(msg "watchdog_opt_10")\e[0m"
+echo -e "\e[1;32m$(msg "watchdog_opt_15")\e[0m"
+echo -e "\e[1;32m$(msg "watchdog_opt_30")\e[0m"
+echo ""
 
+WATCHDOG_INTERVAL=10
+WATCHDOG_CRON_INTERVAL="*/10 * * * *"
+
+read -p "Choice / Выбор [1-4, Enter = 2]: " wdog_choice
+case "$wdog_choice" in
+    1) WATCHDOG_INTERVAL=5;  WATCHDOG_CRON_INTERVAL="*/5 * * * *" ;;
+    2) WATCHDOG_INTERVAL=10; WATCHDOG_CRON_INTERVAL="*/10 * * * *" ;;
+    3) WATCHDOG_INTERVAL=15; WATCHDOG_CRON_INTERVAL="*/15 * * * *" ;;
+    4) WATCHDOG_INTERVAL=30; WATCHDOG_CRON_INTERVAL="*/30 * * * *" ;;
+    *)  WATCHDOG_INTERVAL=10; WATCHDOG_CRON_INTERVAL="*/10 * * * *" ;;
+esac
+
+ok "$(msg "watchdog_interval_set") ${WATCHDOG_INTERVAL} min"
+echo ""
+
+mkdir -p /opt/warp-native/logs || error_exit "$(msg "watchdog_dir_failed")"
+
+cat > /opt/warp-native/config.env <<EOF
+# warp-native watchdog configuration
+# Edited values take effect on next cron run
+
+# Handshake threshold in seconds (default: 180)
+HANDSHAKE_THRESHOLD=180
+
+# Cooldown between restarts in seconds (default: 120)
+RESTART_COOLDOWN=120
+
+# Max log lines before rotation (default: 1000)
+LOG_MAX_LINES=1000
+EOF
+
+cat > /opt/warp-native/warp-watchdog.sh <<'WATCHDOG_EOF'
+#!/bin/bash
+
+CONFIG="/opt/warp-native/config.env"
+LOG="/opt/warp-native/logs/watchdog.log"
+COOLDOWN_FILE="/opt/warp-native/logs/.last_restart"
+
+# Загружаем конфиг
+if [[ -f "$CONFIG" ]]; then
+    source "$CONFIG"
+fi
+
+HANDSHAKE_THRESHOLD="${HANDSHAKE_THRESHOLD:-180}"
+RESTART_COOLDOWN="${RESTART_COOLDOWN:-120}"
+LOG_MAX_LINES="${LOG_MAX_LINES:-1000}"
+
+log() {
+    local level="$1"
+    local message="$2"
+    local ts
+    ts=$(date '+%Y-%m-%d %H:%M:%S')
+    echo "[$ts] [$level] $message" >> "$LOG"
+}
+
+rotate_log() {
+    if [[ -f "$LOG" ]]; then
+        local lines
+        lines=$(wc -l < "$LOG")
+        if [[ $lines -gt $LOG_MAX_LINES ]]; then
+            tail -n "$LOG_MAX_LINES" "$LOG" > "${LOG}.tmp" && mv "${LOG}.tmp" "$LOG"
+        fi
+    fi
+}
+
+do_restart() {
+    local reason="$1"
+
+    # Проверяем cooldown
+    if [[ -f "$COOLDOWN_FILE" ]]; then
+        local last_restart
+        last_restart=$(cat "$COOLDOWN_FILE")
+        local now
+        now=$(date +%s)
+        local diff=$(( now - last_restart ))
+        if [[ $diff -lt $RESTART_COOLDOWN ]]; then
+            log "SKIP" "Restart skipped (cooldown: ${diff}s < ${RESTART_COOLDOWN}s). Reason was: $reason"
+            return
+        fi
+    fi
+
+    log "RESTART" "Restarting wg-quick@warp. Reason: $reason"
+    systemctl restart wg-quick@warp
+    local ret=$?
+    date +%s > "$COOLDOWN_FILE"
+
+    if [[ $ret -eq 0 ]]; then
+        log "OK" "wg-quick@warp restarted successfully"
+    else
+        log "ERROR" "Failed to restart wg-quick@warp (exit code: $ret)"
+    fi
+}
+
+rotate_log
+
+if ! systemctl is-active --quiet wg-quick@warp; then
+    do_restart "systemd unit is not active"
+    exit 0
+fi
+
+handshake_ts=$(wg show warp latest-handshakes 2>/dev/null | awk '{print $2}')
+
+if [[ -z "$handshake_ts" || "$handshake_ts" -eq 0 ]]; then
+    do_restart "no handshake data"
+    exit 0
+fi
+
+now=$(date +%s)
+age=$(( now - handshake_ts ))
+
+if [[ $age -gt $HANDSHAKE_THRESHOLD ]]; then
+    do_restart "handshake too old (${age}s > ${HANDSHAKE_THRESHOLD}s)"
+    exit 0
+fi
+
+if ! ping -I warp -c 2 -W 3 1.1.1.1 &>/dev/null; then
+    do_restart "ping via warp interface failed"
+    exit 0
+fi
+
+log "OK" "WARP is healthy (handshake: ${age}s ago)"
+WATCHDOG_EOF
+
+chmod +x /opt/warp-native/warp-watchdog.sh
+ok "$(msg "watchdog_created")"
+
+cat > /etc/cron.d/warp-native <<EOF
+# warp-native watchdog — checks WARP tunnel health
+${WATCHDOG_CRON_INTERVAL} root /opt/warp-native/warp-watchdog.sh
+EOF
+
+chmod 644 /etc/cron.d/warp-native
+ok "$(msg "watchdog_cron_set")"
+echo ""
+
+# ИТОГОВАЯ СВОДКА
+tunnel_ip=$(ip addr show warp 2>/dev/null | grep 'inet ' | awk '{print $2}' | head -1)
+[[ -z "$tunnel_ip" ]] && tunnel_ip="—"
+
+final_handshake_ts=$(wg show warp latest-handshakes 2>/dev/null | awk '{print $2}')
+if [[ -n "$final_handshake_ts" && "$final_handshake_ts" -gt 0 ]]; then
+    final_age=$(( $(date +%s) - final_handshake_ts ))
+    handshake_display="${final_age} $(msg "summary_seconds_ago")"
+else
+    handshake_display="—"
+fi
+
+if [[ "$wgcf_account_type" == "unlimited" ]]; then
+    account_display="WARP+"
+elif [[ -n "$wgcf_account_type" ]]; then
+    account_display="Free"
+else
+    account_display="—"
+fi
+
+echo ""
 ok "$(msg "installation_complete")"
 echo ""
+echo -e "\e[1;36m$(msg "summary_header")\e[0m"
+echo -e "\e[1;36m  $(msg "summary_account") \e[0m${account_display}"
+echo -e "\e[1;36m  $(msg "summary_tunnel_ip") \e[0m${tunnel_ip}"
+echo -e "\e[1;36m  $(msg "summary_handshake") \e[0m${handshake_display}"
+echo -e "\e[1;36m$(msg "summary_footer")\e[0m"
+echo ""
+
+# Команды управления
 echo -e "\e[1;36m➤ $(msg "check_service"): \e[0msystemctl status wg-quick@warp"
 echo -e "\e[1;36m➤ $(msg "show_info"): \e[0mwg show warp"
 echo -e "\e[1;36m➤ $(msg "stop_interface"): \e[0msystemctl stop wg-quick@warp"
@@ -476,4 +710,6 @@ echo -e "\e[1;36m➤ $(msg "start_interface"): \e[0msystemctl start wg-quick@war
 echo -e "\e[1;36m➤ $(msg "restart_interface"): \e[0msystemctl restart wg-quick@warp"
 echo -e "\e[1;36m➤ $(msg "disable_autostart"): \e[0msystemctl disable wg-quick@warp"
 echo -e "\e[1;36m➤ $(msg "enable_autostart_cmd"): \e[0msystemctl enable wg-quick@warp"
+echo -e "\e[1;36m➤ $(msg "watchdog_log"): \e[0mcat /opt/warp-native/logs/watchdog.log"
+echo -e "\e[1;36m➤ $(msg "watchdog_config"): \e[0mnano /opt/warp-native/config.env"
 echo ""
