@@ -39,6 +39,7 @@ function msg {
             case "$key" in
                 "root_required") echo "Скрипт должен быть запущен от root." ;;
                 "stopping_warp") echo "Отключаем интерфейс warp..." ;;
+                "removing_watchdog") echo "Удаляем watchdog и cron задачу..." ;;
                 "removing_packages") echo "Удаляем пакеты wireguard..." ;;
                 "uninstall_complete") echo "Удаление завершено." ;;
                 *) echo "$key" ;;
@@ -48,6 +49,7 @@ function msg {
             case "$key" in
                 "root_required") echo "Script must be run as root." ;;
                 "stopping_warp") echo "Stopping warp interface..." ;;
+                "removing_watchdog") echo "Removing watchdog and cron job..." ;;
                 "removing_packages") echo "Removing wireguard packages..." ;;
                 "uninstall_complete") echo "Uninstallation completed." ;;
                 *) echo "$key" ;;
@@ -86,6 +88,10 @@ rm -f /etc/wireguard/warp.conf &>/dev/null
 rm -rf /etc/wireguard &>/dev/null
 rm -f /usr/local/bin/wgcf &>/dev/null
 rm -f wgcf-account.toml wgcf-profile.conf &>/dev/null
+
+info "$(msg "removing_watchdog")"
+rm -f /etc/cron.d/warp-native &>/dev/null
+rm -rf /opt/warp-native &>/dev/null
 
 info "$(msg "removing_packages")"
 DEBIAN_FRONTEND=noninteractive apt remove --purge -y wireguard &>/dev/null || true
