@@ -87,10 +87,8 @@ function msg {
                 "wireguard_dir_failed") echo "Не удалось создать директорию /etc/wireguard." ;;
                 "config_move_failed") echo "Не удалось переместить конфигурацию." ;;
                 "config_saved") echo "Конфигурация сохранена в /etc/wireguard/warp.conf." ;;
-                "check_ipv6") echo "6. Проверка включён ли IPv6 и настройка конфигурации WARP..." ;;
-                "ipv6_enabled") echo "IPv6 включён на сервере — оставляем IPv6-адрес в конфигурации WARP." ;;
-                "ipv6_disabled") echo "IPv6 отключён или не настроен на сервере — удаляем IPv6-адрес из конфигурации WARP." ;;
-                "ipv6_removed") echo "IPv6-адрес удалён из конфигурации." ;;
+                "check_ipv6") echo "6. Удаление IPv6 из конфигурации WARP (используется только IPv4)..." ;;
+                "ipv6_removed") echo "IPv6 удалён из конфигурации WARP." ;;
                 "connect_warp") echo "7. Подключение интерфейса WARP..." ;;
                 "connect_failed") echo "Не удалось подключить интерфейс." ;;
                 "warp_connected") echo "Интерфейс WARP успешно подключен." ;;
@@ -193,10 +191,8 @@ function msg {
                 "wireguard_dir_failed") echo "Failed to create /etc/wireguard directory." ;;
                 "config_move_failed") echo "Failed to move configuration." ;;
                 "config_saved") echo "Configuration saved to /etc/wireguard/warp.conf." ;;
-                "check_ipv6") echo "6. Checking if IPv6 is enabled and configuring WARP..." ;;
-                "ipv6_enabled") echo "IPv6 is enabled on server — keeping IPv6 address in WARP configuration." ;;
-                "ipv6_disabled") echo "IPv6 is disabled or not configured on server — removing IPv6 address from WARP configuration." ;;
-                "ipv6_removed") echo "IPv6 address removed from configuration." ;;
+                "check_ipv6") echo "6. Removing IPv6 from WARP configuration (IPv4 only)..." ;;
+                "ipv6_removed") echo "IPv6 removed from WARP configuration." ;;
                 "connect_warp") echo "7. Connecting WARP interface..." ;;
                 "connect_failed") echo "Failed to connect interface." ;;
                 "warp_connected") echo "WARP interface successfully connected." ;;
@@ -457,22 +453,9 @@ ok "$(msg "config_saved")"
 echo ""
 
 info "$(msg "check_ipv6")"
-
-is_ipv6_enabled() {
-    sysctl net.ipv6.conf.all.disable_ipv6 2>/dev/null | grep -q ' = 0' || return 1
-    sysctl net.ipv6.conf.default.disable_ipv6 2>/dev/null | grep -q ' = 0' || return 1
-    ip -6 addr show scope global | grep -qv 'inet6 .*fe80::' || return 1
-    return 0
-}
-
-if is_ipv6_enabled; then
-    ok "$(msg "ipv6_enabled")"
-else
-    warn "$(msg "ipv6_disabled")"
-    sed -i 's/,\s*[0-9a-fA-F:]\+\/128//' /etc/wireguard/warp.conf
-    sed -i '/Address = [0-9a-fA-F:]\+\/128/d' /etc/wireguard/warp.conf
-    ok "$(msg "ipv6_removed")"
-fi
+sed -i 's/,\s*[0-9a-fA-F:]\+\/128//' /etc/wireguard/warp.conf
+sed -i '/Address = [0-9a-fA-F:]\+\/128/d' /etc/wireguard/warp.conf
+ok "$(msg "ipv6_removed")"
 echo ""
 
 info "$(msg "connect_warp")"
