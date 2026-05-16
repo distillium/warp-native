@@ -762,6 +762,8 @@ echo -e "\e[1;36m$(msg "summary_footer")\e[0m"
 echo ""
 
 # Команды управления
+echo -e "\e[1;32m➤ warp\e[0m — статус туннеля и управление"
+echo ""
 echo -e "\e[1;36m➤ $(msg "check_service"): \e[0msystemctl status wg-quick@warp"
 echo -e "\e[1;36m➤ $(msg "show_info"): \e[0mwg show warp"
 echo -e "\e[1;36m➤ $(msg "stop_interface"): \e[0msystemctl stop wg-quick@warp"
