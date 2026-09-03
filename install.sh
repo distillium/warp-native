@@ -302,7 +302,7 @@ echo ""
 
 info "$(msg "install_wireguard")"
 apt update -qq &>/dev/null || error_exit "$(msg "update_failed")"
-apt install wireguard -y &>/dev/null || error_exit "$(msg "wireguard_failed")"
+apt install wireguard nftables -y &>/dev/null || error_exit "$(msg "wireguard_failed")"
 ok "$(msg "wireguard_ok")"
 echo ""
 
@@ -554,6 +554,95 @@ RESTART_COOLDOWN=120
 # Max log lines before rotation (default: 1000)
 LOG_MAX_LINES=1000
 EOF
+
+cat > /opt/warp-native/warp-killswitch.sh <<'KILLSWITCH_EOF'
+#!/bin/bash
+set -euo pipefail
+
+TABLE="warp_native"
+CHAIN="warp_native_killswitch"
+MARK="51888"
+IFACE="warp"
+
+enable_killswitch() {
+    if ! nft list table inet "$TABLE" &>/dev/null; then
+        nft -f - <<EOF
+add table inet $TABLE
+add chain inet $TABLE $CHAIN { type filter hook output priority -150; policy accept; }
+add rule inet $TABLE $CHAIN meta mark $MARK oifname != "$IFACE" counter drop comment "warp-native kill-switch"
+EOF
+    elif ! nft list chain inet "$TABLE" "$CHAIN" &>/dev/null; then
+        nft -f - <<EOF
+add chain inet $TABLE $CHAIN { type filter hook output priority -150; policy accept; }
+add rule inet $TABLE $CHAIN meta mark $MARK oifname != "$IFACE" counter drop comment "warp-native kill-switch"
+EOF
+    else
+        nft -f - <<EOF
+flush chain inet $TABLE $CHAIN
+add rule inet $TABLE $CHAIN meta mark $MARK oifname != "$IFACE" counter drop comment "warp-native kill-switch"
+EOF
+    fi
+}
+
+case "${1:-}" in
+    start)
+        enable_killswitch
+        ;;
+    stop)
+        nft delete chain inet "$TABLE" "$CHAIN" 2>/dev/null || true
+        ;;
+    status)
+        nft -a list chain inet "$TABLE" "$CHAIN"
+        ;;
+    *)
+        echo "Usage: $0 {start|stop|status}"
+        exit 1
+        ;;
+esac
+KILLSWITCH_EOF
+
+chmod +x /opt/warp-native/warp-killswitch.sh
+
+cat > /etc/systemd/system/warp-native-killswitch.service <<'KILLSWITCH_SERVICE_EOF'
+[Unit]
+Description=WARP Native fail-closed kill-switch
+After=nftables.service
+Before=wg-quick@warp.service
+
+[Service]
+Type=oneshot
+ExecStart=/opt/warp-native/warp-killswitch.sh start
+ExecStop=/opt/warp-native/warp-killswitch.sh stop
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
+KILLSWITCH_SERVICE_EOF
+
+mkdir -p /etc/systemd/system/nftables.service.d
+cat > /etc/systemd/system/nftables.service.d/warp-native-killswitch.conf <<'NFTABLES_DROPIN_EOF'
+[Service]
+ExecStartPost=/opt/warp-native/warp-killswitch.sh start
+ExecReload=/opt/warp-native/warp-killswitch.sh start
+NFTABLES_DROPIN_EOF
+
+mkdir -p /etc/systemd/system/wg-quick@warp.service.d
+cat > /etc/systemd/system/wg-quick@warp.service.d/warp-native-killswitch.conf <<'WARP_DEPENDENCY_EOF'
+[Unit]
+Requires=warp-native-killswitch.service
+After=warp-native-killswitch.service
+
+[Service]
+ExecStartPre=/opt/warp-native/warp-killswitch.sh start
+WARP_DEPENDENCY_EOF
+
+systemctl daemon-reload
+
+systemctl enable --now warp-native-killswitch.service &>/dev/null || \
+    error_exit "Failed to enable WARP kill-switch"
+
+ok "WARP fail-closed kill-switch enabled (mark 51888 -> warp only)"
+echo ""
 
 cat > /opt/warp-native/warp-watchdog.sh <<'WATCHDOG_EOF'
 #!/bin/bash

@@ -91,6 +91,14 @@ rm -f wgcf-account.toml wgcf-profile.conf &>/dev/null
 
 info "$(msg "removing_watchdog")"
 rm -f /etc/cron.d/warp-native &>/dev/null
+systemctl disable --now warp-native-killswitch.service &>/dev/null || true
+nft delete chain inet warp_native warp_native_killswitch &>/dev/null || true
+
+rm -f /etc/systemd/system/warp-native-killswitch.service
+rm -f /etc/systemd/system/wg-quick@warp.service.d/warp-native-killswitch.conf
+rm -f /etc/systemd/system/nftables.service.d/warp-native-killswitch.conf
+
+systemctl daemon-reload &>/dev/null || true
 rm -rf /opt/warp-native &>/dev/null
 
 info "$(msg "removing_packages")"

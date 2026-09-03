@@ -69,6 +69,7 @@ ansible-galaxy install themelbine.warp_native
   "streamSettings": {
     "sockopt": {
       "interface": "warp",
+      "mark": 51888,
       "tcpFastOpen": true
     }
   }
@@ -96,6 +97,33 @@ ansible-galaxy install themelbine.warp_native
 
 ```
 </details>
+
+## WARP Kill-switch
+
+The installer enables `warp-native-killswitch.service`. It drops locally generated packets marked `51888` when their selected output interface is not `warp`. This prevents marked WARP traffic from falling back to the server's ordinary network connection when the `warp` interface is unavailable.
+
+The protection applies only to outbounds that set the same mark in Xray:
+
+```json
+"sockopt": {
+  "interface": "warp",
+  "mark": 51888
+}
+```
+
+Removing `mark` disables the kill-switch for that outbound.
+The kill-switch manages only its own nftables chain and restores it after a system nftables reload. After a manual `nft flush ruleset`, restore it:
+
+```bash
+systemctl reload nftables
+```
+
+Check its state and the active rule:
+
+```bash
+systemctl status warp-native-killswitch.service
+nft list chain inet warp_native warp_native_killswitch
+```
 
 ## WARP Interface Management
 
