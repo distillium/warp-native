@@ -2,6 +2,12 @@
 
 SCRIPT_LANG=""
 
+### IPv4 endpoint WARP — прибит принудительно, чтобы не зависеть от DNS (имя резолвится и в IPv6)
+WARP_ENDPOINT_V4="162.159.192.1:2408"
+
+### Файлы wgcf держим в директории проекта
+WGCF_DIR="/opt/warp-native/wgcf"
+
 function select_language {
     echo -e "\n\e[1;35m╭─────────────────────────────────────╮"
     echo -e "│      \e[1;36m  W A R P - N A T I V E        \e[1;35m│"
@@ -54,6 +60,8 @@ function msg {
                 "no_downloader") echo "Не найден wget или curl. Установите один из них и повторите." ;;
                 "register_wgcf") echo "4. Регистрация и генерация конфигурации wgcf..." ;;
                 "account_exists") echo "Файл wgcf-account.toml уже существует. Пропускаем регистрацию." ;;
+                "account_reuse_hint") echo "Используется существующий аккаунт. Если после установки не будет связи — удалите /opt/warp-native/wgcf/wgcf-account.toml и переустановите для чистой регистрации." ;;
+                "account_migrated") echo "Аккаунт wgcf перенесён из домашней директории в /opt/warp-native/wgcf." ;;
                 "registering") echo "Выполняем регистрацию wgcf..." ;;
                 "register_error") echo "wgcf register завершился с кодом" ;;
                 "cf_error_500") echo "Возможна ошибка 500 от Cloudflare." ;;
@@ -87,8 +95,8 @@ function msg {
                 "wireguard_dir_failed") echo "Не удалось создать директорию /etc/wireguard." ;;
                 "config_move_failed") echo "Не удалось переместить конфигурацию." ;;
                 "config_saved") echo "Конфигурация сохранена в /etc/wireguard/warp.conf." ;;
-                "check_ipv6") echo "6. Удаление IPv6 из конфигурации WARP (используется только IPv4)..." ;;
-                "ipv6_removed") echo "IPv6 удалён из конфигурации WARP." ;;
+                "check_ipv6") echo "6. Настройка только IPv4: удаление IPv6 из конфигурации и фиксация IPv4-endpoint..." ;;
+                "ipv6_removed") echo "IPv6 удалён из конфигурации, endpoint зафиксирован на IPv4." ;;
                 "connect_warp") echo "7. Подключение интерфейса WARP..." ;;
                 "connect_failed") echo "Не удалось подключить интерфейс." ;;
                 "warp_connected") echo "Интерфейс WARP успешно подключен." ;;
@@ -96,7 +104,8 @@ function msg {
                 "warp_not_found") echo "Интерфейс WARP не найден — туннель не работает." ;;
                 "handshake_received") echo "Получен handshake →" ;;
                 "warp_active") echo "WARP подключён и активно обменивается трафиком." ;;
-                "handshake_failed") echo "Не удалось получить handshake в течение 10 секунд. Возможны проблемы с подключением." ;;
+                "waiting_handshake") echo "Ожидание подключения" ;;
+                "handshake_pending") echo "Туннель ещё поднимается — проверю связь ниже." ;;
                 "cf_response") echo "Ответ от Cloudflare: warp=on" ;;
                 "cf_not_confirmed") echo "Cloudflare не подтвердил warp=on, но интерфейс работает. Это нормально." ;;
                 "warp_plus_active") echo "WARP+ активирован" ;;
@@ -106,8 +115,8 @@ function msg {
                 "autostart_enabled") echo "Автозапуск включен." ;;
                 "setup_watchdog") echo "10. Настройка WARP Watchdog..." ;;
                 "watchdog_interval_prompt") echo "Выберите интервал проверки watchdog:" ;;
-                "watchdog_opt_5") echo "1) Каждые 5 минут" ;;
-                "watchdog_opt_10") echo "2) Каждые 10 минут (по умолчанию)" ;;
+                "watchdog_opt_5") echo "1) Каждые 5 минут (по умолчанию)" ;;
+                "watchdog_opt_10") echo "2) Каждые 10 минут" ;;
                 "watchdog_opt_15") echo "3) Каждые 15 минут" ;;
                 "watchdog_opt_30") echo "4) Каждые 30 минут" ;;
                 "watchdog_interval_set") echo "Интервал watchdog установлен:" ;;
@@ -135,7 +144,17 @@ function msg {
                 "recreating_account") echo "Обнаружен старый аккаунт. Для активации WARP+ пересоздаём аккаунт..." ;;
                 "old_account_removed") echo "Старый аккаунт удалён." ;;
                 "setup_alias") echo "11. Создание команды warp..." ;;
+                "exit_header") echo "══════════ ВЫХОД ЧЕРЕЗ WARP ═════════" ;;
+                "exit_provider") echo "Провайдер" ;;
+                "exit_avail") echo "доступен" ;;
+                "exit_unavail") echo "недоступен" ;;
+                "exit_unreachable") echo "Через туннель нет связи. Установка завершена — watchdog будет поднимать туннель, проверьте позже командой: warp check" ;;
                 "alias_created") echo "Команда \e[1;32mwarp\e[0m создана: введите \e[1;32mwarp\e[0m для просмотра статуса." ;;
+                "killswitch_failed") echo "Не удалось включить kill-switch (проверьте поддержку nftables в ядре)." ;;
+                "killswitch_enabled") echo "Fail-closed kill-switch включён (метка 51888 → только через warp)." ;;
+                "rollback_start") echo "Установка не завершена — откатываем изменения..." ;;
+                "rollback_done") echo "Изменения откачены." ;;
+                "rollback_skipped") echo "Обнаружена предыдущая установка — автоматический откат не выполняется. Для полного удаления запустите uninstall.sh." ;;
                 *) echo "$key" ;;
             esac
             ;;
@@ -160,6 +179,8 @@ function msg {
                 "no_downloader") echo "Neither wget nor curl found. Please install one and try again." ;;
                 "register_wgcf") echo "4. Registering and generating wgcf configuration..." ;;
                 "account_exists") echo "wgcf-account.toml file already exists. Skipping registration." ;;
+                "account_reuse_hint") echo "Reusing existing account. If there is no connectivity after install — delete /opt/warp-native/wgcf/wgcf-account.toml and reinstall for a clean registration." ;;
+                "account_migrated") echo "wgcf account moved from home directory to /opt/warp-native/wgcf." ;;
                 "registering") echo "Performing wgcf registration..." ;;
                 "register_error") echo "wgcf register exited with code" ;;
                 "cf_error_500") echo "Possible 500 error from Cloudflare." ;;
@@ -193,8 +214,8 @@ function msg {
                 "wireguard_dir_failed") echo "Failed to create /etc/wireguard directory." ;;
                 "config_move_failed") echo "Failed to move configuration." ;;
                 "config_saved") echo "Configuration saved to /etc/wireguard/warp.conf." ;;
-                "check_ipv6") echo "6. Removing IPv6 from WARP configuration (IPv4 only)..." ;;
-                "ipv6_removed") echo "IPv6 removed from WARP configuration." ;;
+                "check_ipv6") echo "6. IPv4-only setup: removing IPv6 from configuration and pinning IPv4 endpoint..." ;;
+                "ipv6_removed") echo "IPv6 removed from configuration, endpoint pinned to IPv4." ;;
                 "connect_warp") echo "7. Connecting WARP interface..." ;;
                 "connect_failed") echo "Failed to connect interface." ;;
                 "warp_connected") echo "WARP interface successfully connected." ;;
@@ -202,7 +223,8 @@ function msg {
                 "warp_not_found") echo "WARP interface not found — tunnel is not working." ;;
                 "handshake_received") echo "Handshake received →" ;;
                 "warp_active") echo "WARP is connected and actively exchanging traffic." ;;
-                "handshake_failed") echo "Failed to get handshake within 10 seconds. Connection problems possible." ;;
+                "waiting_handshake") echo "Waiting for connection" ;;
+                "handshake_pending") echo "Tunnel is still coming up — connectivity will be checked below." ;;
                 "cf_response") echo "Cloudflare response: warp=on" ;;
                 "cf_not_confirmed") echo "Cloudflare did not confirm warp=on, but interface is working. This is normal." ;;
                 "warp_plus_active") echo "WARP+ activated" ;;
@@ -212,8 +234,8 @@ function msg {
                 "autostart_enabled") echo "Autostart enabled." ;;
                 "setup_watchdog") echo "10. Setting up WARP Watchdog..." ;;
                 "watchdog_interval_prompt") echo "Select watchdog check interval:" ;;
-                "watchdog_opt_5") echo "1) Every 5 minutes" ;;
-                "watchdog_opt_10") echo "2) Every 10 minutes (default)" ;;
+                "watchdog_opt_5") echo "1) Every 5 minutes (default)" ;;
+                "watchdog_opt_10") echo "2) Every 10 minutes" ;;
                 "watchdog_opt_15") echo "3) Every 15 minutes" ;;
                 "watchdog_opt_30") echo "4) Every 30 minutes" ;;
                 "watchdog_interval_set") echo "Watchdog interval set:" ;;
@@ -241,7 +263,17 @@ function msg {
                 "recreating_account") echo "Old account detected. Recreating account to activate WARP+..." ;;
                 "old_account_removed") echo "Old account removed." ;;
                 "setup_alias") echo "11. Creating warp command..." ;;
+                "exit_header") echo "═══════════ WARP EXIT INFO ══════════" ;;
+                "exit_provider") echo "Provider" ;;
+                "exit_avail") echo "available" ;;
+                "exit_unavail") echo "unavailable" ;;
+                "exit_unreachable") echo "No connectivity through the tunnel. Installation finished — the watchdog will keep bringing it up, check later with: warp check" ;;
                 "alias_created") echo "\e[1;32mwarp\e[0m command created: type \e[1;32mwarp\e[0m to view status." ;;
+                "killswitch_failed") echo "Failed to enable kill-switch (check nftables support in the kernel)." ;;
+                "killswitch_enabled") echo "Fail-closed kill-switch enabled (mark 51888 → warp only)." ;;
+                "rollback_start") echo "Installation did not complete — rolling back changes..." ;;
+                "rollback_done") echo "Changes rolled back." ;;
+                "rollback_skipped") echo "A previous installation was detected — automatic rollback is skipped. Run uninstall.sh for a full removal." ;;
                 *) echo "$key" ;;
             esac
             ;;
@@ -286,7 +318,76 @@ function restore_dns {
     fi
 }
 
-trap restore_dns EXIT
+WG_PREINSTALLED=false
+NFT_PREINSTALLED=false
+PREV_INSTALL=false
+ROLLBACK_ARMED=false
+INSTALL_COMPLETE=false
+
+function pkg_installed {
+    dpkg-query -W -f='${Status}' "$1" 2>/dev/null | grep -q "ok installed"
+}
+
+function fetch_warp {
+    local url="$1" out=""
+    for attempt in 1 2 3; do
+        out=$(curl -s --interface warp --max-time 8 "$url" 2>/dev/null)
+        [ -n "$out" ] && { echo "$out"; return 0; }
+        sleep 1
+    done
+    return 1
+}
+
+### Откат при ошибке: убираем всё, что создал установщик.
+### wgcf-account.toml сохраняем, иначе повторная регистрация упрётся в rate limit Cloudflare.
+function rollback_install {
+    echo ""
+    warn "$(msg "rollback_start")"
+
+    systemctl disable --now wg-quick@warp &>/dev/null || true
+    ip link delete warp &>/dev/null || true
+    systemctl disable --now warp-native-killswitch.service &>/dev/null || true
+    nft delete table inet warp_native &>/dev/null || true
+
+    rm -f /etc/cron.d/warp-native
+    rm -f /etc/systemd/system/warp-native-killswitch.service
+    rm -f /etc/systemd/system/wg-quick@warp.service.d/warp-native-killswitch.conf
+    rm -f /etc/systemd/system/nftables.service.d/warp-native-killswitch.conf
+    rmdir /etc/systemd/system/wg-quick@warp.service.d /etc/systemd/system/nftables.service.d &>/dev/null || true
+    systemctl daemon-reload &>/dev/null || true
+    systemctl reset-failed wg-quick@warp warp-native-killswitch.service &>/dev/null || true
+
+    rm -rf /opt/warp-native
+    rm -f /usr/local/bin/warp /usr/local/bin/wgcf
+    rm -f /etc/wireguard/warp.conf
+    rmdir /etc/wireguard &>/dev/null || true
+    rm -f "$WGCF_DIR/wgcf-profile.conf"
+
+    ### Пакеты удаляем только если их поставил этот запуск
+    if [[ "$WG_PREINSTALLED" == false ]]; then
+        DEBIAN_FRONTEND=noninteractive apt remove --purge -y wireguard wireguard-tools &>/dev/null || true
+    fi
+    if [[ "$NFT_PREINSTALLED" == false ]]; then
+        DEBIAN_FRONTEND=noninteractive apt remove --purge -y nftables &>/dev/null || true
+    fi
+
+    ok "$(msg "rollback_done")"
+}
+
+function on_exit {
+    if [[ "$ROLLBACK_ARMED" == true && "$INSTALL_COMPLETE" != true ]]; then
+        if [[ "$PREV_INSTALL" == true ]]; then
+            warn "$(msg "rollback_skipped")"
+        else
+            rollback_install
+        fi
+    fi
+    restore_dns
+}
+
+trap on_exit EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM HUP
 
 if [[ $EUID -ne 0 ]]; then
     fail "This script must be run as root / Этот скрипт должен быть запущен от имени root"
@@ -295,7 +396,28 @@ fi
 
 select_language
 
-cd "$HOME"
+### Состояние до установки, для безопасного отката (снимаем ДО создания файлов)
+if [[ -f /etc/wireguard/warp.conf || -d /opt/warp-native || -f /usr/local/bin/warp ]]; then
+    PREV_INSTALL=true
+fi
+if pkg_installed wireguard || pkg_installed wireguard-tools; then
+    WG_PREINSTALLED=true
+fi
+if pkg_installed nftables; then
+    NFT_PREINSTALLED=true
+fi
+ROLLBACK_ARMED=true
+
+mkdir -p "$WGCF_DIR"
+
+### Миграция со старых версий: переносим аккаунт из $HOME, чтобы сохранить device и не триггерить новую регистрацию (rate limit)
+if [[ -f "$HOME/wgcf-account.toml" && ! -f "$WGCF_DIR/wgcf-account.toml" ]]; then
+    mv "$HOME/wgcf-account.toml" "$WGCF_DIR/wgcf-account.toml"
+    [[ -f "$HOME/wgcf-profile.conf" ]] && mv "$HOME/wgcf-profile.conf" "$WGCF_DIR/wgcf-profile.conf"
+    info "$(msg "account_migrated")"
+fi
+
+cd "$WGCF_DIR"
 
 info "$(msg "start_install")"
 echo ""
@@ -334,7 +456,6 @@ info "$(msg "arch_detected") $ARCH -> $WGCF_ARCH"
 WGCF_DOWNLOAD_URL="https://github.com/ViRb3/wgcf/releases/download/${WGCF_VERSION}/wgcf_${WGCF_VERSION#v}_linux_${WGCF_ARCH}"
 WGCF_BINARY_NAME="wgcf_${WGCF_VERSION#v}_linux_${WGCF_ARCH}"
 
-# fallback wget -> curl для скачивания
 if command -v wget &>/dev/null; then
     wget -q "$WGCF_DOWNLOAD_URL" -O "$WGCF_BINARY_NAME" || error_exit "$(msg "wgcf_download_failed")"
 elif command -v curl &>/dev/null; then
@@ -364,6 +485,7 @@ LICENSE_APPLIED=false
 
 if [[ -f wgcf-account.toml ]]; then
     info "$(msg "account_exists")"
+    warn "$(msg "account_reuse_hint")"
 else
     info "$(msg "registering")"
     info "$(msg "wgcf_binary_check")"
@@ -459,10 +581,17 @@ echo ""
 info "$(msg "check_ipv6")"
 sed -i 's/,\s*[0-9a-fA-F:]\+\/128//' /etc/wireguard/warp.conf
 sed -i '/Address = [0-9a-fA-F:]\+\/128/d' /etc/wireguard/warp.conf
+sed -i "s|^Endpoint = .*|Endpoint = ${WARP_ENDPOINT_V4}|" /etc/wireguard/warp.conf
+sed -i 's|^AllowedIPs = .*|AllowedIPs = 0.0.0.0/0|' /etc/wireguard/warp.conf
+chmod 600 /etc/wireguard/warp.conf
 ok "$(msg "ipv6_removed")"
 echo ""
 
 info "$(msg "connect_warp")"
+### Чистый запуск: при переустановке юнит может висеть active (exited) без интерфейса
+systemctl stop wg-quick@warp &>/dev/null || true
+ip link delete warp &>/dev/null || true
+systemctl reset-failed wg-quick@warp &>/dev/null || true
 systemctl start wg-quick@warp &>/dev/null || error_exit "$(msg "connect_failed")"
 ok "$(msg "warp_connected")"
 echo ""
@@ -470,35 +599,30 @@ echo ""
 info "$(msg "check_status")"
 
 if ! wg show warp &>/dev/null; then
-    fail "$(msg "warp_not_found")"
-    exit 1
-fi
+    warn "$(msg "warp_not_found")"
+else
+    ### Ждём handshake 15с. Это НЕ вердикт - связь проверяется ниже
+    handshake_ts=0
+    HANDSHAKE_WAIT=15
+    SPIN='⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏'
+    for ((i=0; i<HANDSHAKE_WAIT; i++)); do
+        handshake_ts=$(wg show warp latest-handshakes 2>/dev/null | awk '{print $2}')
+        if [[ -n "$handshake_ts" && "$handshake_ts" -gt 0 ]]; then
+            break
+        fi
+        c="${SPIN:i%10:1}"
+        printf "\r\e[1;34m[..]\e[0m $(msg "waiting_handshake") \e[1;36m%s\e[0m  %ss " "$c" "$((HANDSHAKE_WAIT-i))"
+        sleep 1
+    done
+    printf "\r\e[K"
 
-# handshake через unix timestamp
-handshake_ts=0
-for i in {1..10}; do
-    handshake_ts=$(wg show warp latest-handshakes | awk '{print $2}')
     if [[ -n "$handshake_ts" && "$handshake_ts" -gt 0 ]]; then
         age=$(( $(date +%s) - handshake_ts ))
         ok "$(msg "handshake_received") ${age}s ago"
         ok "$(msg "warp_active")"
-        break
+    else
+        info "$(msg "handshake_pending")"
     fi
-    sleep 1
-done
-
-if [[ -z "$handshake_ts" || "$handshake_ts" -eq 0 ]]; then
-    warn "$(msg "handshake_failed")"
-fi
-
-curl_result=$(curl -s --interface warp --max-time 5 https://www.cloudflare.com/cdn-cgi/trace | grep "warp=" | cut -d= -f2)
-
-if [[ "$curl_result" == "plus" ]]; then
-    ok "$(msg "cf_response_plus")"
-elif [[ "$curl_result" == "on" ]]; then
-    ok "$(msg "cf_response")"
-else
-    warn "$(msg "cf_not_confirmed")"
 fi
 
 wgcf_account_type=$(wgcf status 2>/dev/null | grep -i "Account type" | awk -F': ' '{print $2}' | xargs)
@@ -514,7 +638,6 @@ systemctl enable wg-quick@warp &>/dev/null || error_exit "$(msg "autostart_faile
 ok "$(msg "autostart_enabled")"
 echo ""
 
-# WATCHDOG
 info "$(msg "setup_watchdog")"
 echo ""
 info "$(msg "watchdog_interval_prompt")"
@@ -524,16 +647,16 @@ echo -e "\e[1;32m$(msg "watchdog_opt_15")\e[0m"
 echo -e "\e[1;32m$(msg "watchdog_opt_30")\e[0m"
 echo ""
 
-WATCHDOG_INTERVAL=10
-WATCHDOG_CRON_INTERVAL="*/10 * * * *"
+WATCHDOG_INTERVAL=5
+WATCHDOG_CRON_INTERVAL="*/5 * * * *"
 
-read -p "Choice / Выбор [1-4, Enter = 2]: " wdog_choice
+read -p "Choice / Выбор [1-4, Enter = 1]: " wdog_choice
 case "$wdog_choice" in
     1) WATCHDOG_INTERVAL=5;  WATCHDOG_CRON_INTERVAL="*/5 * * * *" ;;
     2) WATCHDOG_INTERVAL=10; WATCHDOG_CRON_INTERVAL="*/10 * * * *" ;;
     3) WATCHDOG_INTERVAL=15; WATCHDOG_CRON_INTERVAL="*/15 * * * *" ;;
     4) WATCHDOG_INTERVAL=30; WATCHDOG_CRON_INTERVAL="*/30 * * * *" ;;
-    *)  WATCHDOG_INTERVAL=10; WATCHDOG_CRON_INTERVAL="*/10 * * * *" ;;
+    *)  WATCHDOG_INTERVAL=5;  WATCHDOG_CRON_INTERVAL="*/5 * * * *" ;;
 esac
 
 ok "$(msg "watchdog_interval_set") ${WATCHDOG_INTERVAL} min"
@@ -544,9 +667,6 @@ mkdir -p /opt/warp-native/logs || error_exit "$(msg "watchdog_dir_failed")"
 cat > /opt/warp-native/config.env <<EOF
 # warp-native watchdog configuration
 # Edited values take effect on next cron run
-
-# Handshake threshold in seconds (default: 180)
-HANDSHAKE_THRESHOLD=180
 
 # Cooldown between restarts in seconds (default: 120)
 RESTART_COOLDOWN=120
@@ -639,9 +759,9 @@ WARP_DEPENDENCY_EOF
 systemctl daemon-reload
 
 systemctl enable --now warp-native-killswitch.service &>/dev/null || \
-    error_exit "Failed to enable WARP kill-switch"
+    error_exit "$(msg "killswitch_failed")"
 
-ok "WARP fail-closed kill-switch enabled (mark 51888 -> warp only)"
+ok "$(msg "killswitch_enabled")"
 echo ""
 
 cat > /opt/warp-native/warp-watchdog.sh <<'WATCHDOG_EOF'
@@ -651,12 +771,10 @@ CONFIG="/opt/warp-native/config.env"
 LOG="/opt/warp-native/logs/watchdog.log"
 COOLDOWN_FILE="/opt/warp-native/logs/.last_restart"
 
-# Загружаем конфиг
 if [[ -f "$CONFIG" ]]; then
     source "$CONFIG"
 fi
 
-HANDSHAKE_THRESHOLD="${HANDSHAKE_THRESHOLD:-180}"
 RESTART_COOLDOWN="${RESTART_COOLDOWN:-120}"
 LOG_MAX_LINES="${LOG_MAX_LINES:-1000}"
 
@@ -681,7 +799,6 @@ rotate_log() {
 do_restart() {
     local reason="$1"
 
-    # Проверяем cooldown
     if [[ -f "$COOLDOWN_FILE" ]]; then
         local last_restart
         last_restart=$(cat "$COOLDOWN_FILE")
@@ -695,6 +812,12 @@ do_restart() {
     fi
 
     log "RESTART" "Restarting wg-quick@warp. Reason: $reason"
+
+    ### Интерфейс поднят вручную мимо systemd — иначе restart упал бы с "File exists"
+    if ! systemctl is-active --quiet wg-quick@warp && ip link show warp &>/dev/null; then
+        wg-quick down warp &>/dev/null || ip link delete warp &>/dev/null
+    fi
+
     systemctl restart wg-quick@warp
     local ret=$?
     date +%s > "$COOLDOWN_FILE"
@@ -713,27 +836,30 @@ if ! systemctl is-active --quiet wg-quick@warp; then
     exit 0
 fi
 
+### Возраст handshake только для лога, НЕ критерий рестарта:
+### На живой ноде в простое он протухает, но туннель рабочий
 handshake_ts=$(wg show warp latest-handshakes 2>/dev/null | awk '{print $2}')
+if [[ -n "$handshake_ts" && "$handshake_ts" -gt 0 ]]; then
+    hs_age=$(( $(date +%s) - handshake_ts ))
+else
+    hs_age="n/a"
+fi
 
-if [[ -z "$handshake_ts" || "$handshake_ts" -eq 0 ]]; then
-    do_restart "no handshake data"
+### Главный критерий - идёт ли трафик. ICMP заодно будит handshake, а если ICMP зарезан - пробуем TCP
+if ping -I warp -c 2 -W 3 1.1.1.1 &>/dev/null; then
+    log "OK" "WARP is healthy via ICMP (handshake: ${hs_age}s ago)"
     exit 0
 fi
 
-now=$(date +%s)
-age=$(( now - handshake_ts ))
-
-if [[ $age -gt $HANDSHAKE_THRESHOLD ]]; then
-    do_restart "handshake too old (${age}s > ${HANDSHAKE_THRESHOLD}s)"
+### ICMP не прошёл — фолбэк на TCP
+if curl -s --interface warp --max-time 8 https://www.cloudflare.com/cdn-cgi/trace 2>/dev/null | grep -q '^warp='; then
+    log "OK" "WARP is healthy via TCP (ICMP blocked; handshake: ${hs_age}s ago)"
     exit 0
 fi
 
-if ! ping -I warp -c 2 -W 3 1.1.1.1 &>/dev/null; then
-    do_restart "ping via warp interface failed"
-    exit 0
-fi
-
-log "OK" "WARP is healthy (handshake: ${age}s ago)"
+### Ни ICMP, ни TCP - туннель действительно мёртв
+do_restart "no connectivity via warp (ICMP + TCP failed; handshake: ${hs_age}s ago)"
+exit 0
 WATCHDOG_EOF
 
 chmod +x /opt/warp-native/warp-watchdog.sh
@@ -752,6 +878,54 @@ info "$(msg "setup_alias")"
 
 cat > /usr/local/bin/warp <<'WARP_CMD_EOF'
 #!/bin/bash
+
+### Запрос через warp с ретраями: 3 попытки, таймаут 8с
+function fetch_warp {
+    local url="$1" out=""
+    for attempt in 1 2 3; do
+        out=$(curl -s --interface warp --max-time 8 "$url" 2>/dev/null)
+        [ -n "$out" ] && { echo "$out"; return 0; }
+        sleep 1
+    done
+    return 1
+}
+
+function check_exit {
+    echo -e "\e[1;35m──────────────────────────────────────\e[0m"
+    echo -e "\e[1;36mВыход через WARP:\e[0m"
+    printf "  \e[2;37m%s\e[0m\r" "проверяю выход..."
+
+    local ij ip1 co1 ci1 asn aj co2 isp cg
+    ij=$(fetch_warp https://ifconfig.co/json)
+    ip1=$(echo "$ij" | grep -oE '"ip":[ ]*"[^"]*"'      | cut -d'"' -f4)
+    co1=$(echo "$ij" | grep -oE '"country":[ ]*"[^"]*"' | cut -d'"' -f4)
+    ci1=$(echo "$ij" | grep -oE '"city":[ ]*"[^"]*"'    | cut -d'"' -f4)
+    asn=$(echo "$ij" | grep -oE '"asn_org":[ ]*"[^"]*"' | cut -d'"' -f4)
+
+    aj=$(fetch_warp http://ip-api.com/json)
+    co2=$(echo "$aj" | grep -oE '"country":[ ]*"[^"]*"' | cut -d'"' -f4)
+    isp=$(echo "$aj" | grep -oE '"isp":[ ]*"[^"]*"'     | cut -d'"' -f4)
+
+    printf "  \e[1;36mIP          \e[0m %s\n"  "${ip1:-—}"
+    printf "  \e[1;36mifconfig.co \e[0m %s%s\n" "${co1:-—}" "${ci1:+, $ci1}"
+    printf "  \e[1;36mip-api      \e[0m %s\n"  "${co2:-—}"
+    printf "  \e[1;36mПровайдер   \e[0m %s\n"  "${asn:-${isp:-—}}"
+
+    cg=$(fetch_warp https://chatgpt.com/cdn-cgi/trace | grep '^loc=' | cut -d= -f2)
+    printf "                      \r"
+    local v
+    if [ -n "$cg" ]; then
+        if [[ "$cg" =~ ^(RU|CN|BY|IR|KP|CU|SY|VE)$ ]]; then
+            v="\e[1;31mнедоступен\e[0m ($cg)"
+        else
+            v="\e[1;32mдоступен\e[0m ($cg)"
+        fi
+    else
+        v="—"
+    fi
+    printf "  \e[1;36mChatGPT     \e[0m %b\n" "$v"
+    echo -e "\e[1;35m──────────────────────────────────────\e[0m"
+}
 
 function show_status {
     echo ""
@@ -778,7 +952,7 @@ function show_status {
         handshake="—"
     fi
 
-    account_type=$(wgcf status 2>/dev/null | grep -i "Account type" | awk -F': ' '{print $2}' | xargs)
+    account_type=$(wgcf --config /opt/warp-native/wgcf/wgcf-account.toml status 2>/dev/null | grep -i "Account type" | awk -F': ' '{print $2}' | xargs)
     if [[ "$account_type" == "unlimited" ]]; then
         account="WARP+"
     elif [[ -n "$account_type" ]]; then
@@ -792,10 +966,17 @@ function show_status {
     echo -e "  \e[1;36mHandshake  :\e[0m $handshake"
     echo -e "  \e[1;36mАккаунт    :\e[0m $account"
     echo ""
+
+    if systemctl is-active --quiet wg-quick@warp; then
+        check_exit
+        echo ""
+    fi
+
     echo -e "\e[1;35m──────────────────────────────────────\e[0m"
     echo -e "  \e[1;32mwarp start\e[0m    — запустить"
     echo -e "  \e[1;32mwarp stop\e[0m     — остановить"
     echo -e "  \e[1;32mwarp restart\e[0m  — перезапустить"
+    echo -e "  \e[1;32mwarp check\e[0m    — проверить выход (IP, страна, ChatGPT)"
     echo -e "  \e[1;32mwarp log\e[0m      — лог watchdog"
     echo -e "\e[1;35m──────────────────────────────────────\e[0m"
     echo ""
@@ -805,6 +986,7 @@ case "$1" in
     start)   systemctl start wg-quick@warp ;;
     stop)    systemctl stop wg-quick@warp ;;
     restart) systemctl restart wg-quick@warp ;;
+    check)   check_exit ;;
     log)
         if [[ ! -f /opt/warp-native/logs/watchdog.log ]]; then
             echo "Лог пока пуст — watchdog ещё не запускался."
@@ -820,7 +1002,8 @@ chmod +x /usr/local/bin/warp
 ok "$(msg "alias_created")"
 echo ""
 
-# ИТОГОВАЯ СВОДКА
+INSTALL_COMPLETE=true
+
 tunnel_ip=$(ip addr show warp 2>/dev/null | grep 'inet ' | awk '{print $2}' | head -1)
 [[ -z "$tunnel_ip" ]] && tunnel_ip="—"
 
@@ -850,7 +1033,42 @@ echo -e "\e[1;36m  $(msg "summary_handshake") \e[0m${handshake_display}"
 echo -e "\e[1;36m$(msg "summary_footer")\e[0m"
 echo ""
 
-# Команды управления
+if systemctl is-active --quiet wg-quick@warp && wg show warp &>/dev/null; then
+    printf "\e[2;37m%s\e[0m\r" "проверяю выход..."
+    ij=$(fetch_warp https://ifconfig.co/json)
+    ip1=$(echo "$ij" | grep -oE '"ip":[ ]*"[^"]*"'      | cut -d'"' -f4)
+    co1=$(echo "$ij" | grep -oE '"country":[ ]*"[^"]*"' | cut -d'"' -f4)
+    ci1=$(echo "$ij" | grep -oE '"city":[ ]*"[^"]*"'    | cut -d'"' -f4)
+    asn=$(echo "$ij" | grep -oE '"asn_org":[ ]*"[^"]*"' | cut -d'"' -f4)
+    aj=$(fetch_warp http://ip-api.com/json)
+    co2=$(echo "$aj" | grep -oE '"country":[ ]*"[^"]*"' | cut -d'"' -f4)
+    isp=$(echo "$aj" | grep -oE '"isp":[ ]*"[^"]*"'     | cut -d'"' -f4)
+    cg=$(fetch_warp https://chatgpt.com/cdn-cgi/trace | grep '^loc=' | cut -d= -f2)
+    printf "                      \r"
+
+    echo -e "\e[1;36m$(msg "exit_header")\e[0m"
+    printf "  \e[1;36mIP          \e[0m %s\n"  "${ip1:-—}"
+    printf "  \e[1;36mifconfig.co \e[0m %s%s\n" "${co1:-—}" "${ci1:+, $ci1}"
+    printf "  \e[1;36mip-api      \e[0m %s\n"  "${co2:-—}"
+    printf "  \e[1;36mПровайдер   \e[0m %s\n"  "${asn:-${isp:-—}}"
+    if [ -n "$cg" ]; then
+        if [[ "$cg" =~ ^(RU|CN|BY|IR|KP|CU|SY|VE)$ ]]; then
+            printf "  \e[1;36mChatGPT     \e[0m \e[1;31m%s\e[0m (%s)\n" "$(msg "exit_unavail")" "$cg"
+        else
+            printf "  \e[1;36mChatGPT     \e[0m \e[1;32m%s\e[0m (%s)\n" "$(msg "exit_avail")" "$cg"
+        fi
+    else
+        printf "  \e[1;36mChatGPT     \e[0m —\n"
+    fi
+    echo -e "\e[1;36m$(msg "summary_footer")\e[0m"
+    echo ""
+
+    ### Вердикт: ни один сервис не ответил - реальная проблема связи
+    if [[ -z "$ip1" && -z "$co2" && -z "$cg" ]]; then
+        warn "$(msg "exit_unreachable")"
+    fi
+fi
+
 echo -e "\e[1;32m➤ warp\e[0m — статус туннеля и управление"
 echo ""
 echo -e "\e[1;36m➤ $(msg "disable_autostart"): \e[0msystemctl disable wg-quick@warp"
