@@ -64,7 +64,7 @@ ansible-galaxy install themelbine.warp_native
   "tag": "warp-out",
   "protocol": "freedom",
   "settings": {
-    "domainStrategy": "UseIP"
+    "domainStrategy": "ForceIPv4"
   },
   "streamSettings": {
     "sockopt": {
