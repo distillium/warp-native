@@ -39,8 +39,9 @@ function msg {
             case "$key" in
                 "root_required") echo "Скрипт должен быть запущен от root." ;;
                 "stopping_warp") echo "Отключаем интерфейс warp..." ;;
-                "removing_watchdog") echo "Удаляем watchdog и cron задачу..." ;;
+                "removing_watchdog") echo "Удаляем watchdog, kill-switch и cron задачу..." ;;
                 "removing_packages") echo "Удаляем пакеты wireguard..." ;;
+                "wg_kept") echo "Найдены другие конфигурации WireGuard — пакеты wireguard не удаляются." ;;
                 "uninstall_complete") echo "Удаление завершено." ;;
                 *) echo "$key" ;;
             esac
@@ -49,8 +50,9 @@ function msg {
             case "$key" in
                 "root_required") echo "Script must be run as root." ;;
                 "stopping_warp") echo "Stopping warp interface..." ;;
-                "removing_watchdog") echo "Removing watchdog and cron job..." ;;
+                "removing_watchdog") echo "Removing watchdog, kill-switch and cron job..." ;;
                 "removing_packages") echo "Removing wireguard packages..." ;;
+                "wg_kept") echo "Other WireGuard configurations found — wireguard packages are kept." ;;
                 "uninstall_complete") echo "Uninstallation completed." ;;
                 *) echo "$key" ;;
             esac
@@ -76,33 +78,45 @@ if [[ $EUID -ne 0 ]]; then
 fi
 
 select_language
+cd "$HOME"
 
+### Останавливаем через systemd, иначе юнит зависнет в active (exited)
+info "$(msg "stopping_warp")"
+systemctl disable --now wg-quick@warp &>/dev/null || true
 if ip link show warp &>/dev/null; then
-    info "$(msg "stopping_warp")"
-    wg-quick down warp &>/dev/null || true
+    wg-quick down warp &>/dev/null || ip link delete warp &>/dev/null || true
 fi
 
-systemctl disable wg-quick@warp &>/dev/null || true
-
-rm -f /etc/wireguard/warp.conf &>/dev/null
-rm -rf /etc/wireguard &>/dev/null
-rm -f /usr/local/bin/wgcf &>/dev/null
-rm -f wgcf-account.toml wgcf-profile.conf &>/dev/null
-
+### kill-switch останавливаем ДО удаления /opt/warp-native - его ExecStop вызывает скрипт оттуда
 info "$(msg "removing_watchdog")"
-rm -f /etc/cron.d/warp-native &>/dev/null
+rm -f /etc/cron.d/warp-native
 systemctl disable --now warp-native-killswitch.service &>/dev/null || true
-nft delete chain inet warp_native warp_native_killswitch &>/dev/null || true
+nft delete table inet warp_native &>/dev/null || true
 
 rm -f /etc/systemd/system/warp-native-killswitch.service
 rm -f /etc/systemd/system/wg-quick@warp.service.d/warp-native-killswitch.conf
 rm -f /etc/systemd/system/nftables.service.d/warp-native-killswitch.conf
+rmdir /etc/systemd/system/wg-quick@warp.service.d /etc/systemd/system/nftables.service.d &>/dev/null || true
 
 systemctl daemon-reload &>/dev/null || true
-rm -rf /opt/warp-native &>/dev/null
+systemctl reset-failed wg-quick@warp warp-native-killswitch.service &>/dev/null || true
 
+rm -rf /opt/warp-native
+rm -f /usr/local/bin/warp /usr/local/bin/wgcf
+
+### Только конфиг WARP - остальные конфигурации WireGuard не трогаем
+rm -f /etc/wireguard/warp.conf
+rmdir /etc/wireguard &>/dev/null || true
+
+### Остатки wgcf от старых версий в $HOME (новые уже удалены вместе с /opt/warp-native)
+rm -f "$HOME/wgcf-account.toml" "$HOME/wgcf-profile.conf"
+
+### Пакеты удаляем только если других WireGuard-конфигов нет
 info "$(msg "removing_packages")"
-DEBIAN_FRONTEND=noninteractive apt remove --purge -y wireguard &>/dev/null || true
-DEBIAN_FRONTEND=noninteractive apt autoremove -y &>/dev/null || true
+if [[ -d /etc/wireguard ]] || [[ -n "$(wg show interfaces 2>/dev/null)" ]]; then
+    info "$(msg "wg_kept")"
+else
+    DEBIAN_FRONTEND=noninteractive apt remove --purge -y wireguard wireguard-tools &>/dev/null || true
+fi
 
 completed "$(msg "uninstall_complete")"
